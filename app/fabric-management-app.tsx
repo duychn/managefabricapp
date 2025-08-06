@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Package, TrendingUp, Warehouse, Download, Upload, FileText, Copy } from 'lucide-react';
+import { Plus, Package, TrendingUp, Warehouse, Download, Upload, FileText, Copy, Trash2, X } from 'lucide-react';
 
 const FabricApp = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -35,8 +35,14 @@ const FabricApp = () => {
   const [editingProduct, setEditingProduct] = useState(null);
   const [editingProduction, setEditingProduction] = useState(null);
 
-  // Initialize with sample data for demo
+  // Notification states
+  const [showWelcomeNotification, setShowWelcomeNotification] = useState(false);
+
+  // Initialize with sample data and welcome notification
   useEffect(() => {
+    // Check if welcome notification has been shown before
+    const hasSeenWelcome = localStorage.getItem('fabric-app-welcome-seen');
+    
     // Chỉ load sample data nếu chưa có dữ liệu
     if (fabrics.length === 0 && products.length === 0 && productionRecords.length === 0) {
       const sampleFabrics = [
@@ -91,17 +97,12 @@ const FabricApp = () => {
       setFabrics(sampleFabrics);
       setProducts(sampleProducts);
       
-      // Alert người dùng về sample data
-      setTimeout(() => {
-        alert('🎉 Chào mừng bạn đến với Hệ thống Quản Lý Vải May!\n\n' +
-              '📊 Hệ thống đã tải một số dữ liệu mẫu để bạn dễ dàng trải nghiệm.\n\n' +
-              '💡 Các tính năng mới:\n' +
-              '- 📋 Báo cáo HTML đẹp mắt với thống kê chi tiết\n' +
-              '- 💾 Backup toàn bộ dữ liệu\n' +
-              '- 🔄 Khôi phục dữ liệu từ file backup\n\n' +
-              '⚠️ Lưu ý: Dữ liệu sẽ mất khi refresh trang.\n' +
-              '📁 Hãy sử dụng tính năng "Backup" để lưu trữ dữ liệu của bạn!');
-      }, 1000);
+      // Show welcome notification only if not seen before
+      if (!hasSeenWelcome) {
+        setTimeout(() => {
+          setShowWelcomeNotification(true);
+        }, 1000);
+      }
     }
   }, []);
 
@@ -232,6 +233,30 @@ const FabricApp = () => {
     };
     setProducts(prev => [...prev, duplicatedProduct]);
     alert(`✅ Đã sao chép sản phẩm ${product.code} thành ${duplicatedProduct.code}`);
+  };
+
+  // Delete all products with confirmation
+  const handleDeleteAllProducts = () => {
+    if (products.length === 0) {
+      alert('❌ Không có sản phẩm nào để xóa!');
+      return;
+    }
+
+    const confirmMessage = `⚠️ CẢNH BÁO: XÓA TẤT CẢ SẢN PHẨM\n\n` +
+                          `🗑️ Bạn có chắc chắn muốn xóa tất cả ${products.length} sản phẩm?\n\n` +
+                          `❗ Hành động này KHÔNG THỂ HOÀN TÁC!\n\n` +
+                          `💾 Hãy đảm bảo bạn đã backup dữ liệu trước khi thực hiện.`;
+
+    if (window.confirm(confirmMessage)) {
+      setProducts([]);
+      alert(`✅ Đã xóa thành công tất cả sản phẩm!`);
+    }
+  };
+
+  // Close welcome notification and mark as seen
+  const closeWelcomeNotification = () => {
+    setShowWelcomeNotification(false);
+    localStorage.setItem('fabric-app-welcome-seen', 'true');
   };
 
   const handleAddProduction = () => {
@@ -1323,6 +1348,14 @@ const FabricApp = () => {
                   Nhập dữ liệu
                 </button>
                 <button
+                  onClick={handleDeleteAllProducts}
+                  className="bg-red-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-red-700 text-sm"
+                  title="Xóa tất cả sản phẩm"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Xóa hết
+                </button>
+                <button
                   onClick={() => setShowProductModal(true)}
                   className="bg-purple-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-purple-700"
                 >
@@ -1865,6 +1898,61 @@ const FabricApp = () => {
               >
                 Hủy
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Welcome Notification */}
+      {showWelcomeNotification && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-purple-600 flex items-center gap-2">
+                  🎉 Chào mừng đến với Hệ thống Quản Lý Vải May!
+                </h3>
+                <button
+                  onClick={closeWelcomeNotification}
+                  className="text-gray-400 hover:text-gray-600 p-1"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <div className="space-y-3 text-sm text-gray-700">
+                <p className="flex items-start gap-2">
+                  <span className="text-blue-500">📊</span>
+                  <span>Hệ thống đã tải một số dữ liệu mẫu để bạn dễ dàng trải nghiệm.</span>
+                </p>
+                
+                <div className="bg-blue-50 p-3 rounded-lg">
+                  <p className="font-medium text-blue-800 mb-2">💡 Các tính năng chính:</p>
+                  <ul className="space-y-1 text-blue-700 text-xs">
+                    <li>• 📋 Báo cáo HTML đẹp mắt với thống kê chi tiết</li>
+                    <li>• 💾 Backup toàn bộ dữ liệu</li>
+                    <li>• 🔄 Khôi phục dữ liệu từ file backup</li>
+                    <li>• 🗑️ Xóa hết sản phẩm với một click</li>
+                  </ul>
+                </div>
+                
+                <div className="bg-amber-50 p-3 rounded-lg border border-amber-200">
+                  <p className="text-amber-800 text-xs">
+                    <span className="font-medium">⚠️ Lưu ý:</span> Dữ liệu sẽ mất khi refresh trang.
+                    <br />
+                    <span className="font-medium">💾 Khuyến nghị:</span> Hãy sử dụng tính năng "Backup" để lưu trữ dữ liệu của bạn!
+                  </p>
+                </div>
+              </div>
+              
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={closeWelcomeNotification}
+                  className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 text-sm font-medium"
+                >
+                  Đã hiểu, bắt đầu sử dụng! 🚀
+                </button>
+              </div>
             </div>
           </div>
         </div>
