@@ -1116,6 +1116,104 @@ const FabricApp = () => {
     }
   };
 
+  // Excel Export with Sample Data Functions
+  const exportExcelWithSampleData = (dataType) => {
+    let data, filename;
+    
+    switch(dataType) {
+      case 'fabrics':
+        data = [
+          {
+            'Mã vải': 'VAI001',
+            'Chất liệu': 'Cotton',
+            'Màu sắc': 'Trắng',
+            'Khổ vải': '1.6m',
+            'Tồn kho (m)': 200,
+            'Đơn giá (đ)': 55000
+          },
+          {
+            'Mã vải': 'VAI002',
+            'Chất liệu': 'Polyester',
+            'Màu sắc': 'Xanh dương',
+            'Khổ vải': '2.0m',
+            'Tồn kho (m)': 150,
+            'Đơn giá (đ)': 48000
+          },
+          {
+            'Mã vải': 'VAI003',
+            'Chất liệu': 'Satin',
+            'Màu sắc': 'Hồng',
+            'Khổ vải': '1.5m',
+            'Tồn kho (m)': 80,
+            'Đơn giá (đ)': 75000
+          }
+        ];
+        filename = 'Mau_danh_muc_vai.xlsx';
+        break;
+      case 'products':
+        data = [
+          {
+            'Mã sản phẩm': 'SP001',
+            'Tên sản phẩm': 'Bộ chăn ga đôi',
+            'Loại': 'Bộ chăn ga',
+            'Mã vải': 'VAI001',
+            'Định mức (m/bộ)': 5.5
+          },
+          {
+            'Mã sản phẩm': 'SP002',
+            'Tên sản phẩm': 'Gối ôm lông vũ',
+            'Loại': 'Gối',
+            'Mã vải': 'VAI002',
+            'Định mức (m/bộ)': 1.2
+          },
+          {
+            'Mã sản phẩm': 'SP003',
+            'Tên sản phẩm': 'Chăn đơn cotton',
+            'Loại': 'Chăn',
+            'Mã vải': 'VAI001',
+            'Định mức (m/bộ)': 3.0
+          }
+        ];
+        filename = 'Mau_danh_muc_san_pham.xlsx';
+        break;
+      case 'production':
+        data = [
+          {
+            'Ngày sản xuất': '2024-01-15',
+            'Mã sản phẩm': 'SP001',
+            'Tên sản phẩm': 'Bộ chăn ga đôi',
+            'Số lượng': 10,
+            'Ghi chú': 'Đơn hàng khách VIP'
+          },
+          {
+            'Ngày sản xuất': '2024-01-16',
+            'Mã sản phẩm': 'SP002',
+            'Tên sản phẩm': 'Gối ôm lông vũ',
+            'Số lượng': 25,
+            'Ghi chú': 'Đơn hàng xuất khẩu'
+          },
+          {
+            'Ngày sản xuất': '2024-01-17',
+            'Mã sản phẩm': 'SP003',
+            'Tên sản phẩm': 'Chăn đơn cotton',
+            'Số lượng': 15,
+            'Ghi chú': 'Đơn hàng nội địa'
+          }
+        ];
+        filename = 'Mau_theo_doi_san_xuat.xlsx';
+        break;
+      default:
+        return;
+    }
+    
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Dữ liệu mẫu');
+    XLSX.writeFile(wb, filename);
+    
+    alert(`✅ Đã tải file Excel mẫu: ${filename}\n\n💡 Hướng dẫn:\n1. Mở file và chỉnh sửa dữ liệu\n2. Lưu file\n3. Sử dụng nút "Nhập Excel" để import`);
+  };
+
   // Excel Import/Export Functions
   const exportToExcel = (dataType) => {
     let data, filename, headers;
@@ -1297,6 +1395,35 @@ const FabricApp = () => {
             setProducts(prev => [...prev, ...importedProducts]);
             alert(`✅ Đã nhập thành công ${importedProducts.length} sản phẩm từ Excel!`);
           }
+        } else if (dataType === 'production') {
+          const requiredHeaders = ['Ngày sản xuất', 'Mã sản phẩm', 'Số lượng'];
+          const headers = Object.keys(jsonData[0]);
+          const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
+          
+          if (missingHeaders.length > 0) {
+            alert(`❌ Thiếu cột bắt buộc: ${missingHeaders.join(', ')}\n\n💡 Cột cần có:\nNgày sản xuất, Mã sản phẩm, Tên sản phẩm, Số lượng, Ghi chú`);
+            return;
+          }
+          
+          const importedRecords = jsonData.map((row, index) => {
+            const record = {
+              id: Date.now() + index,
+              date: row['Ngày sản xuất'] || '',
+              productCode: row['Mã sản phẩm'] || '',
+              quantity: parseInt(row['Số lượng'] || 0),
+              notes: row['Ghi chú'] || ''
+            };
+            
+            if (!record.date || !record.productCode || !record.quantity) {
+              throw new Error(`Dòng ${index + 2}: Thiếu ngày sản xuất, mã sản phẩm hoặc số lượng`);
+            }
+            return record;
+          });
+          
+          if (window.confirm(`🔍 Tìm thấy ${importedRecords.length} lệnh sản xuất hợp lệ từ file Excel.\n\n📥 Bạn có muốn thêm vào danh sách không?`)) {
+            setProductionRecords(prev => [...prev, ...importedRecords]);
+            alert(`✅ Đã nhập thành công ${importedRecords.length} lệnh sản xuất từ Excel!`);
+          }
         }
       } catch (error) {
         alert(`❌ Lỗi đọc file Excel: ${error.message}\n\n💡 Vui lòng kiểm tra format file Excel.`);
@@ -1338,6 +1465,13 @@ const FabricApp = () => {
                 onChange={(e) => handleExcelImport(e, 'products')}
                 style={{ display: 'none' }}
                 id="excel-products-input"
+              />
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={(e) => handleExcelImport(e, 'production')}
+                style={{ display: 'none' }}
+                id="excel-production-input"
               />
               <button
                 onClick={() => document.getElementById('backup-file-input').click()}
@@ -1420,7 +1554,7 @@ const FabricApp = () => {
                         }}
                         className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                       >
-                        📄 Báo cáo (Text)
+                        📄 Báo cáo HTML
                       </button>
                     </div>
                   </div>
@@ -1603,6 +1737,14 @@ const FabricApp = () => {
                   Nhập CSV
                 </button>
                 <button
+                  onClick={() => exportExcelWithSampleData('fabrics')}
+                  className="bg-indigo-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 text-sm"
+                  title="Tải file Excel mẫu"
+                >
+                  <Download className="w-4 h-4" />
+                  Mẫu Excel
+                </button>
+                <button
                   onClick={() => document.getElementById('excel-fabrics-input').click()}
                   className="bg-green-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700 text-sm"
                   title="Nhập dữ liệu từ file Excel"
@@ -1621,19 +1763,20 @@ const FabricApp = () => {
             </div>
             
             <div className="bg-white rounded-lg shadow overflow-hidden">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mã vải</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Chất liệu</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Màu sắc</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Khổ vải</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tồn kho (m)</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Đơn giá</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Giá trị</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Thao tác</th>
-                  </tr>
-                </thead>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-max">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Mã vải</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Chất liệu</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Màu sắc</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Khổ vải</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Tồn kho (m)</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Đơn giá</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Giá trị</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Thao tác</th>
+                    </tr>
+                  </thead>
                 <tbody className="divide-y divide-gray-200">
                 {fabrics.length === 0 ? (
                   <tr>
@@ -1687,7 +1830,8 @@ const FabricApp = () => {
                   ))
                 )}
                 </tbody>
-              </table>
+                </table>
+              </div>
             </div>
           </div>
         )}
@@ -1718,6 +1862,14 @@ const FabricApp = () => {
                   Nhập CSV
                 </button>
                 <button
+                  onClick={() => exportExcelWithSampleData('products')}
+                  className="bg-indigo-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 text-sm"
+                  title="Tải file Excel mẫu"
+                >
+                  <Download className="w-4 h-4" />
+                  Mẫu Excel
+                </button>
+                <button
                   onClick={() => document.getElementById('excel-products-input').click()}
                   className="bg-green-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700 text-sm"
                   title="Nhập dữ liệu từ file Excel"
@@ -1744,17 +1896,18 @@ const FabricApp = () => {
             </div>
             
             <div className="bg-white rounded-lg shadow overflow-hidden">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mã sản phẩm</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tên sản phẩm</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Loại</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mã vải</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Định mức (m/bộ)</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Thao tác</th>
-                  </tr>
-                </thead>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-max">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Mã sản phẩm</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Tên sản phẩm</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Loại</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Mã vải</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Định mức (m/bộ)</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Thao tác</th>
+                    </tr>
+                  </thead>
                 <tbody className="divide-y divide-gray-200">
                 {products.length === 0 ? (
                   <tr>
@@ -1797,7 +1950,8 @@ const FabricApp = () => {
                   ))
                 )}
                 </tbody>
-              </table>
+                </table>
+              </div>
             </div>
           </div>
         )}
@@ -1813,7 +1967,23 @@ const FabricApp = () => {
                   className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700 text-sm"
                 >
                   <Download className="w-4 h-4" />
-                  Xuất dữ liệu
+                  Xuất CSV
+                </button>
+                <button
+                  onClick={() => exportExcelWithSampleData('production')}
+                  className="bg-indigo-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 text-sm"
+                  title="Tải file Excel mẫu"
+                >
+                  <Download className="w-4 h-4" />
+                  Mẫu Excel
+                </button>
+                <button
+                  onClick={() => document.getElementById('excel-production-input').click()}
+                  className="bg-purple-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-purple-700 text-sm"
+                  title="Nhập dữ liệu từ file Excel"
+                >
+                  <FileText className="w-4 h-4" />
+                  Nhập Excel
                 </button>
                 <button
                   onClick={() => setShowProductionModal(true)}
@@ -1826,19 +1996,20 @@ const FabricApp = () => {
             </div>
             
             <div className="bg-white rounded-lg shadow overflow-hidden">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ngày</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mã sản phẩm</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tên sản phẩm</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Số lượng</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vải đã dùng</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Giá trị vải</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ghi chú</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Thao tác</th>
-                  </tr>
-                </thead>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-max">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Ngày</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Mã sản phẩm</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Tên sản phẩm</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Số lượng</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Vải đã dùng</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Giá trị vải</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Ghi chú</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Thao tác</th>
+                    </tr>
+                  </thead>
                 <tbody className="divide-y divide-gray-200">
                 {productionRecords.length === 0 ? (
                   <tr>
@@ -1876,7 +2047,8 @@ const FabricApp = () => {
                   ))
                 )}
                 </tbody>
-              </table>
+                </table>
+              </div>
             </div>
           </div>
         )}
