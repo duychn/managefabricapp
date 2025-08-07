@@ -15,6 +15,7 @@ const FabricApp = () => {
   const [showProductModal, setShowProductModal] = useState(false);
   const [showProductionModal, setShowProductionModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showHelpModal, setShowHelpModal] = useState(false);
   const [importType, setImportType] = useState('');
   const [importText, setImportText] = useState('');
   
@@ -484,6 +485,12 @@ const FabricApp = () => {
 
   const exportReport = () => {
     try {
+      // Tính toán thống kê
+      const totalItems = fabrics.length;
+      const totalValue = fabrics.reduce((sum, fabric) => sum + (fabric.currentLength * fabric.price), 0);
+      const lowStock = fabrics.filter(fabric => fabric.currentLength < 150).length;
+      const totalUsed = productionRecords.reduce((sum, record) => sum + (record.fabricUsed || 0), 0);
+
       // Thống kê chi tiết về vải sử dụng
       const fabricUsageStats = {};
       productionRecords.forEach(record => {
@@ -502,6 +509,22 @@ const FabricApp = () => {
         fabricUsageStats[fabricCode].productionCount += 1;
       });
 
+      // Thống kê theo tháng
+      const monthlyStats = {};
+      productionRecords.forEach(record => {
+        const month = record.date.substring(0, 7); // YYYY-MM
+        if (!monthlyStats[month]) {
+          monthlyStats[month] = {
+            count: 0,
+            fabricUsed: 0,
+            value: 0
+          };
+        }
+        monthlyStats[month].count += 1;
+        monthlyStats[month].fabricUsed += record.fabricUsed || 0;
+        monthlyStats[month].value += record.fabricValue || 0;
+      });
+
       // Tạo HTML báo cáo
       const reportDate = new Date().toLocaleDateString('vi-VN');
       const reportTime = new Date().toLocaleTimeString('vi-VN');
@@ -513,6 +536,7 @@ const FabricApp = () => {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Báo Cáo Quản Lý Vải May - ${reportDate}</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         * {
             margin: 0;
@@ -686,9 +710,73 @@ const FabricApp = () => {
             color: #666;
             font-style: italic;
         }
+        
+        .chart-container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin: 20px 0;
+        }
+        
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 30px;
+            margin: 30px 0;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background-color: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4CAF50, #45a049);
+            transition: width 0.3s ease;
+        }
+        
+        .gauge-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 200px;
+        }
+        
+        .print-button {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            z-index: 1000;
+        }
+        
+        .print-button:hover {
+            background: #2980b9;
+            transform: translateY(-2px);
+        }
+        
+        @media print {
+            body { background: white; }
+            .report-container { box-shadow: none; }
+            .print-button { display: none; }
+        }
     </style>
 </head>
 <body>
+    <button class="print-button" onclick="window.print()">🖨️ In báo cáo</button>
     <div class="report-container">
         <div class="report-header">
             <h1 class="report-title">📊 BÁO CÁO QUẢN LÝ VẢI MAY</h1>
@@ -712,6 +800,20 @@ const FabricApp = () => {
                 <div class="stat-card purple">
                     <div class="stat-number">${Math.round(totalUsed * 10) / 10}</div>
                     <div class="stat-label">Tổng vải đã dùng (m)</div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <h2 class="section-title">📈 Biểu Đồ Thống Kê</h2>
+                <div class="chart-grid">
+                    <div class="chart-container">
+                        <h3 style="text-align: center; margin-bottom: 20px;">Phân Bố Tồn Kho Vải</h3>
+                        <canvas id="fabricStockChart" width="400" height="300"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <h3 style="text-align: center; margin-bottom: 20px;">Thống Kê Sản Xuất Theo Tháng</h3>
+                        <canvas id="monthlyProductionChart" width="400" height="300"></canvas>
+                    </div>
                 </div>
             </div>
             
@@ -848,6 +950,95 @@ const FabricApp = () => {
             <p>Báo cáo này được xuất vào ${reportDate} lúc ${reportTime}</p>
         </div>
     </div>
+
+    <script>
+        // Biểu đồ tồn kho vải
+        const fabricStockCtx = document.getElementById('fabricStockChart');
+        if (fabricStockCtx) {
+            new Chart(fabricStockCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: [${fabrics.map(f => `'${f.code} - ${f.material}'`).join(', ')}],
+                    datasets: [{
+                        label: 'Tồn Kho (m)',
+                        data: [${fabrics.map(f => f.currentLength).join(', ')}],
+                        backgroundColor: [
+                            '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', 
+                            '#9966FF', '#FF9F40', '#FF6384', '#C9CBCF'
+                        ],
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.label + ': ' + context.parsed + 'm';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Biểu đồ sản xuất theo tháng
+        const monthlyProductionCtx = document.getElementById('monthlyProductionChart');
+        if (monthlyProductionCtx) {
+            const monthlyData = ${JSON.stringify(Object.entries(monthlyStats).map(([month, data]) => ({month, ...data})))};
+            
+            new Chart(monthlyProductionCtx, {
+                type: 'bar',
+                data: {
+                    labels: monthlyData.map(item => item.month || 'N/A'),
+                    datasets: [{
+                        label: 'Số lệnh sản xuất',
+                        data: monthlyData.map(item => item.count || 0),
+                        backgroundColor: 'rgba(54, 162, 235, 0.8)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1,
+                        yAxisID: 'y'
+                    }, {
+                        label: 'Vải sử dụng (m)',
+                        data: monthlyData.map(item => Math.round((item.fabricUsed || 0) * 10) / 10),
+                        backgroundColor: 'rgba(255, 99, 132, 0.8)',
+                        borderColor: 'rgba(255, 99, 132, 1)',
+                        borderWidth: 1,
+                        yAxisID: 'y1'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        }
+                    },
+                    scales: {
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            grid: {
+                                drawOnChartArea: false,
+                            },
+                        }
+                    }
+                }
+            });
+        }
+    </script>
 </body>
 </html>`;
 
@@ -862,7 +1053,7 @@ const FabricApp = () => {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
       
-      alert('✅ Đã xuất báo cáo HTML thành công!\n\n📁 File đã được tải về máy tính của bạn.\n🌐 Mở file bằng trình duyệt để xem báo cáo đẹp mắt.');
+      alert('✅ Đã xuất báo cáo HTML thành công!\n\n📁 File đã được tải về máy tính của bạn.\n🌐 Mở file bằng trình duyệt để xem báo cáo đẹp mắt.\n📊 Báo cáo bao gồm biểu đồ tương tác và nút in tiện lợi!\n\n💡 Mẹo: Có thể in trực tiếp từ báo cáo hoặc chia sẻ file với đồng nghiệp.');
       
     } catch (error) {
       alert('❌ Lỗi xuất báo cáo: ' + error.message);
@@ -1063,9 +1254,18 @@ const FabricApp = () => {
               <button
                 onClick={exportReport}
                 className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700 text-sm"
+                title="Xuất báo cáo HTML với biểu đồ đẹp mắt và khả năng in"
               >
                 <FileText className="w-4 h-4" />
-                Xuất báo cáo
+                Xuất báo cáo HTML
+              </button>
+              <button
+                onClick={() => setShowHelpModal(true)}
+                className="bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-orange-700 hover:scale-105 transition-all duration-200 text-sm shadow-lg"
+                title="📖 Hướng dẫn sử dụng chi tiết - Click để xem các thao tác và mẹo sử dụng hiệu quả!"
+              >
+                <HelpCircle className="w-4 h-4 animate-pulse" />
+                Hướng dẫn
               </button>
             </div>
           </div>
@@ -1121,6 +1321,31 @@ const FabricApp = () => {
         {/* Dashboard Tab */}
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
+            {/* Help tip for new users */}
+            {(fabrics.length <= 3 && products.length <= 2) && (
+              <div className="bg-gradient-to-r from-orange-50 to-yellow-50 border-l-4 border-orange-400 p-4 rounded-lg">
+                <div className="flex items-start">
+                  <div className="flex-shrink-0">
+                    <HelpCircle className="w-6 h-6 text-orange-600" />
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-orange-700">
+                      <span className="font-medium">🌟 Mới sử dụng hệ thống?</span> 
+                      {' '}Click nút{' '}
+                      <button
+                        onClick={() => setShowHelpModal(true)}
+                        className="inline-flex items-center px-2 py-1 text-xs font-medium text-orange-800 bg-orange-100 rounded hover:bg-orange-200 transition-colors"
+                      >
+                        <HelpCircle className="w-3 h-3 mr-1" />
+                        Hướng dẫn
+                      </button>
+                      {' '}ở góc trên bên phải để xem hướng dẫn chi tiết cách sử dụng từng tính năng!
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div className="bg-blue-50 p-6 rounded-lg border-l-4 border-blue-500">
                 <div className="flex items-center justify-between">
@@ -1904,6 +2129,165 @@ const FabricApp = () => {
         </div>
       )}
 
+      {/* Help Modal */}
+      {showHelpModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
+              <h3 className="text-2xl font-bold text-blue-600 flex items-center gap-2">
+                📖 Hướng Dẫn Sử Dụng Hệ Thống Quản Lý Vải May
+              </h3>
+              <button
+                onClick={() => setShowHelpModal(false)}
+                className="text-gray-400 hover:text-gray-600 p-1"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Bắt đầu */}
+                <div className="space-y-6">
+                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                    <h4 className="text-lg font-semibold text-blue-800 mb-3 flex items-center gap-2">
+                      🚀 Bắt Đầu Sử Dụng
+                    </h4>
+                    <ul className="space-y-2 text-sm text-blue-700">
+                      <li className="flex items-start gap-2">
+                        <span className="font-medium">1.</span>
+                        <span><strong>Quản lý vải:</strong> Thêm thông tin các loại vải vào hệ thống bao gồm mã vải, chất liệu, màu sắc, khổ vải, số lượng tồn kho và giá.</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="font-medium">2.</span>
+                        <span><strong>Tạo sản phẩm:</strong> Định nghĩa các sản phẩm cần sản xuất và chỉ định loại vải, định mức vải cần dùng.</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="font-medium">3.</span>
+                        <span><strong>Theo dõi sản xuất:</strong> Ghi nhận các lệnh sản xuất, hệ thống sẽ tự động trừ vải từ kho.</span>
+                      </li>
+                    </ul>
+                  </div>
+
+                  <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                    <h4 className="text-lg font-semibold text-green-800 mb-3 flex items-center gap-2">
+                      🧵 Quản Lý Vải
+                    </h4>
+                    <ul className="space-y-2 text-sm text-green-700">
+                      <li><strong>• Thêm vải mới:</strong> Click "Thêm vải" → Nhập đầy đủ thông tin → Lưu</li>
+                      <li><strong>• Sửa thông tin:</strong> Click biểu tượng bút chì trên dòng vải cần sửa</li>
+                      <li><strong>• Xóa vải:</strong> Click biểu tượng thùng rác (chỉ được xóa khi chưa sử dụng)</li>
+                      <li><strong>• Xuất dữ liệu:</strong> Click "Xuất dữ liệu" để tải file CSV</li>
+                      <li><strong>• Cảnh báo:</strong> Vải có tồn kho < 150m sẽ được đánh dấu cần nhập hàng</li>
+                    </ul>
+                  </div>
+
+                  <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                    <h4 className="text-lg font-semibold text-purple-800 mb-3 flex items-center gap-2">
+                      📦 Quản Lý Sản Phẩm
+                    </h4>
+                    <ul className="space-y-2 text-sm text-purple-700">
+                      <li><strong>• Tạo sản phẩm:</strong> Click "Thêm sản phẩm" → Điền thông tin</li>
+                      <li><strong>• Chọn vải:</strong> Chọn loại vải từ dropdown, nhập định mức vải cần dùng</li>
+                      <li><strong>• Loại sản phẩm:</strong> Bộ chăn ga, Gối, Nệm, Khăn tắm, Rèm cửa...</li>
+                      <li><strong>• Sửa/Xóa:</strong> Tương tự như quản lý vải</li>
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Cột 2 */}
+                <div className="space-y-6">
+                  <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
+                    <h4 className="text-lg font-semibold text-orange-800 mb-3 flex items-center gap-2">
+                      🏭 Theo Dõi Sản Xuất
+                    </h4>
+                    <ul className="space-y-2 text-sm text-orange-700">
+                      <li><strong>• Thêm lệnh sản xuất:</strong> Chọn sản phẩm → Nhập số lượng → Lưu</li>
+                      <li><strong>• Tự động trừ vải:</strong> Hệ thống sẽ tự động tính và trừ vải từ kho</li>
+                      <li><strong>• Kiểm tra vải:</strong> Hệ thống cảnh báo nếu không đủ vải</li>
+                      <li><strong>• Hoàn trả vải:</strong> Khi xóa lệnh sản xuất, vải sẽ được hoàn trả</li>
+                      <li><strong>• Ghi chú:</strong> Có thể thêm ghi chú cho mỗi lệnh sản xuất</li>
+                    </ul>
+                  </div>
+
+                  <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-200">
+                    <h4 className="text-lg font-semibold text-indigo-800 mb-3 flex items-center gap-2">
+                      📊 Báo Cáo & Thống Kê
+                    </h4>
+                    <ul className="space-y-2 text-sm text-indigo-700">
+                      <li><strong>• Dashboard:</strong> Xem tổng quan tình hình vải, sản phẩm, sản xuất</li>
+                      <li><strong>• Báo cáo HTML:</strong> Click "Xuất báo cáo" để tạo báo cáo đẹp mắt</li>
+                      <li><strong>• Biểu đồ trực quan:</strong> Biểu đồ tròn tồn kho, biểu đồ cột sản xuất theo tháng</li>
+                      <li><strong>• In báo cáo:</strong> Click nút "In báo cáo" trong file HTML</li>
+                      <li><strong>• Thống kê chi tiết:</strong> Xem vải đã sử dụng, giá trị tồn kho...</li>
+                    </ul>
+                  </div>
+
+                  <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+                    <h4 className="text-lg font-semibold text-red-800 mb-3 flex items-center gap-2">
+                      💾 Backup & Khôi Phục
+                    </h4>
+                    <ul className="space-y-2 text-sm text-red-700">
+                      <li><strong>• Backup dữ liệu:</strong> Click "Backup" để tải file JSON chứa toàn bộ dữ liệu</li>
+                      <li><strong>• Khôi phục:</strong> Click "Khôi phục" → Chọn file backup → Xác nhận</li>
+                      <li><strong>• Quan trọng:</strong> Hãy backup thường xuyên vì dữ liệu mất khi refresh trang</li>
+                      <li><strong>• Format file:</strong> File backup có định dạng JSON, không được chỉnh sửa tay</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* Mẹo sử dụng */}
+              <div className="mt-8 bg-gradient-to-r from-yellow-50 to-yellow-100 p-6 rounded-lg border border-yellow-200">
+                <h4 className="text-xl font-semibold text-yellow-800 mb-4 flex items-center gap-2">
+                  💡 Mẹo Sử Dụng Hiệu Quả
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-yellow-700">
+                  <div>
+                    <p className="font-medium mb-2">🎯 Quy trình làm việc đề xuất:</p>
+                    <ol className="space-y-1 ml-4">
+                      <li>1. Nhập thông tin tất cả loại vải vào hệ thống</li>
+                      <li>2. Tạo danh mục sản phẩm với định mức vải</li>
+                      <li>3. Theo dõi sản xuất hàng ngày</li>
+                      <li>4. Xuất báo cáo định kỳ để phân tích</li>
+                      <li>5. Backup dữ liệu cuối mỗi ngày</li>
+                    </ol>
+                  </div>
+                  <div>
+                    <p className="font-medium mb-2">⚡ Thao tác nhanh:</p>
+                    <ul className="space-y-1 ml-4">
+                      <li>• Sử dụng tab để chuyển nhanh giữa các trang</li>
+                      <li>• Double-click để chỉnh sửa nhanh</li>
+                      <li>• Kiểm tra cảnh báo vải sắp hết hàng</li>
+                      <li>• Sử dụng ghi chú để tracking chi tiết</li>
+                      <li>• Xuất báo cáo HTML để chia sẻ với đồng nghiệp</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* Hỗ trợ */}
+              <div className="mt-6 bg-gray-50 p-4 rounded-lg border">
+                <p className="text-center text-sm text-gray-600">
+                  <span className="font-medium">🤖 Hệ thống được phát triển bởi Claude AI</span>
+                  <br />
+                  Nếu gặp vấn đề hoặc cần thêm tính năng, hãy liên hệ để được hỗ trợ!
+                </p>
+              </div>
+            </div>
+            
+            <div className="sticky bottom-0 bg-white border-t px-6 py-4 flex justify-end">
+              <button
+                onClick={() => setShowHelpModal(false)}
+                className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 font-medium"
+              >
+                Đã hiểu, đóng hướng dẫn
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Welcome Notification */}
       {showWelcomeNotification && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -1930,10 +2314,11 @@ const FabricApp = () => {
                 <div className="bg-blue-50 p-3 rounded-lg">
                   <p className="font-medium text-blue-800 mb-2">💡 Các tính năng chính:</p>
                   <ul className="space-y-1 text-blue-700 text-xs">
-                    <li>• 📋 Báo cáo HTML đẹp mắt với thống kê chi tiết</li>
-                    <li>• 💾 Backup toàn bộ dữ liệu</li>
-                    <li>• 🔄 Khôi phục dữ liệu từ file backup</li>
-                    <li>• 🗑️ Xóa hết sản phẩm với một click</li>
+                    <li>• 📖 Hướng dẫn sử dụng chi tiết (Click nút "Hướng dẫn")</li>
+                    <li>• 📊 Báo cáo HTML đẹp mắt với biểu đồ thống kê</li>
+                    <li>• 💾 Backup & khôi phục toàn bộ dữ liệu</li>
+                    <li>• 🖨️ In báo cáo trực tiếp từ file HTML</li>
+                    <li>• 📈 Biểu đồ trực quan cho tồn kho và sản xuất</li>
                   </ul>
                 </div>
                 
