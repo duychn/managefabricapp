@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Plus, Package, TrendingUp, Warehouse, Download, Upload, FileText, Copy, Trash2, X } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 const FabricApp = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -37,14 +38,30 @@ const FabricApp = () => {
 
   // Notification states
   const [showWelcomeNotification, setShowWelcomeNotification] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
-  // Initialize with sample data and welcome notification
+  // Load data from localStorage on component mount
   useEffect(() => {
     // Check if welcome notification has been shown before
     const hasSeenWelcome = localStorage.getItem('fabric-app-welcome-seen');
     
-    // Chỉ load sample data nếu chưa có dữ liệu
-    if (fabrics.length === 0 && products.length === 0 && productionRecords.length === 0) {
+    // Load saved data from localStorage
+    const savedFabrics = localStorage.getItem('fabric-app-fabrics');
+    const savedProducts = localStorage.getItem('fabric-app-products');
+    const savedProductionRecords = localStorage.getItem('fabric-app-production-records');
+    
+    if (savedFabrics) {
+      setFabrics(JSON.parse(savedFabrics));
+    }
+    if (savedProducts) {
+      setProducts(JSON.parse(savedProducts));
+    }
+    if (savedProductionRecords) {
+      setProductionRecords(JSON.parse(savedProductionRecords));
+    }
+    
+    // Chỉ load sample data nếu chưa có dữ liệu đã lưu
+    if (!savedFabrics && !savedProducts && !savedProductionRecords) {
       const sampleFabrics = [
         {
           id: 1,
@@ -106,14 +123,48 @@ const FabricApp = () => {
     }
   }, []);
 
-  // Helper function để nhắc nhở backup
+  // Auto-save data to localStorage whenever data changes
+  useEffect(() => {
+    if (fabrics.length > 0) {
+      localStorage.setItem('fabric-app-fabrics', JSON.stringify(fabrics));
+    }
+  }, [fabrics]);
+
+  useEffect(() => {
+    if (products.length > 0) {
+      localStorage.setItem('fabric-app-products', JSON.stringify(products));
+    }
+  }, [products]);
+
+  useEffect(() => {
+    if (productionRecords.length > 0) {
+      localStorage.setItem('fabric-app-production-records', JSON.stringify(productionRecords));
+    }
+  }, [productionRecords]);
+
+  // Close export menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showExportMenu && !event.target.closest('.relative')) {
+        setShowExportMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showExportMenu]);
+
+  // Helper function để nhắc nhở backup (cập nhật thông báo vì giờ đã có auto-save)
   const remindBackup = () => {
     const totalRecords = fabrics.length + products.length + productionRecords.length;
-    if (totalRecords > 0 && totalRecords % 5 === 0) {
+    if (totalRecords > 0 && totalRecords % 10 === 0) {
       setTimeout(() => {
         if (window.confirm('💾 NHẮC NHỞ BACKUP DỮ LIỆU\n\n' +
                           `📊 Bạn đã có ${totalRecords} bản ghi trong hệ thống!\n\n` +
-                          '⚠️ Dữ liệu sẽ mất khi refresh trang.\n' +
+                          '✅ Dữ liệu đã được tự động lưu vào trình duyệt.\n' +
+                          '💡 Tuy nhiên, bạn nên backup ra file để đảm bảo an toàn.\n' +
                           '🔄 Bạn có muốn backup dữ liệu ngay bây giờ không?')) {
           exportAllData();
         }
@@ -895,6 +946,46 @@ const FabricApp = () => {
     alert('✅ Đã backup toàn bộ dữ liệu thành công!\n\n💾 File backup đã được tải về máy tính.\n📁 Sử dụng tính năng "Khôi phục dữ liệu" để khôi phục khi cần.');
   };
 
+  // Clear all data function
+  const clearAllData = () => {
+    const totalRecords = fabrics.length + products.length + productionRecords.length;
+    
+    if (totalRecords === 0) {
+      alert('📭 Không có dữ liệu để xóa!\n\n💡 Hệ thống hiện tại không có dữ liệu nào.');
+      return;
+    }
+    
+    if (window.confirm('🗑️ XÓA TOÀN BỘ DỮ LIỆU\n\n' +
+                       '⚠️ Thao tác này sẽ xóa vĩnh viễn:\n' +
+                       `- ${fabrics.length} loại vải\n` +
+                       `- ${products.length} sản phẩm\n` +
+                       `- ${productionRecords.length} lệnh sản xuất\n\n` +
+                       '💾 Bạn có chắc chắn muốn xóa hết không?\n' +
+                       '💡 Khuyến nghị: Backup dữ liệu trước khi xóa!')) {
+      
+      if (window.confirm('🚨 XÁC NHẬN LẦN CUỐI\n\n' +
+                         '❌ Dữ liệu sau khi xóa KHÔNG THỂ khôi phục!\n' +
+                         '🔄 Bạn chỉ có thể khôi phục từ file backup.\n\n' +
+                         '✅ Bạn có thực sự muốn tiếp tục không?')) {
+        
+        // Clear all states
+        setFabrics([]);
+        setProducts([]);
+        setProductionRecords([]);
+        
+        // Clear localStorage
+        localStorage.removeItem('fabric-app-fabrics');
+        localStorage.removeItem('fabric-app-products');
+        localStorage.removeItem('fabric-app-production-records');
+        
+        // Reset active tab to dashboard
+        setActiveTab('dashboard');
+        
+        alert('✅ Đã xóa toàn bộ dữ liệu thành công!\n\n🔄 Hệ thống đã được reset về trạng thái ban đầu.');
+      }
+    }
+  };
+
   // Backup/Restore functions
   const handleImportBackup = (event) => {
     const file = event.target.files[0];
@@ -1025,6 +1116,324 @@ const FabricApp = () => {
     }
   };
 
+  // Excel Export with Sample Data Functions
+  const exportExcelWithSampleData = (dataType) => {
+    let data, filename;
+    
+    switch(dataType) {
+      case 'fabrics':
+        data = [
+          {
+            'Mã vải': 'VAI001',
+            'Chất liệu': 'Cotton',
+            'Màu sắc': 'Trắng',
+            'Khổ vải': '1.6m',
+            'Tồn kho (m)': 200,
+            'Đơn giá (đ)': 55000
+          },
+          {
+            'Mã vải': 'VAI002',
+            'Chất liệu': 'Polyester',
+            'Màu sắc': 'Xanh dương',
+            'Khổ vải': '2.0m',
+            'Tồn kho (m)': 150,
+            'Đơn giá (đ)': 48000
+          },
+          {
+            'Mã vải': 'VAI003',
+            'Chất liệu': 'Satin',
+            'Màu sắc': 'Hồng',
+            'Khổ vải': '1.5m',
+            'Tồn kho (m)': 80,
+            'Đơn giá (đ)': 75000
+          }
+        ];
+        filename = 'Mau_danh_muc_vai.xlsx';
+        break;
+      case 'products':
+        data = [
+          {
+            'Mã sản phẩm': 'SP001',
+            'Tên sản phẩm': 'Bộ chăn ga đôi',
+            'Loại': 'Bộ chăn ga',
+            'Mã vải': 'VAI001',
+            'Định mức (m/bộ)': 5.5
+          },
+          {
+            'Mã sản phẩm': 'SP002',
+            'Tên sản phẩm': 'Gối ôm lông vũ',
+            'Loại': 'Gối',
+            'Mã vải': 'VAI002',
+            'Định mức (m/bộ)': 1.2
+          },
+          {
+            'Mã sản phẩm': 'SP003',
+            'Tên sản phẩm': 'Chăn đơn cotton',
+            'Loại': 'Chăn',
+            'Mã vải': 'VAI001',
+            'Định mức (m/bộ)': 3.0
+          }
+        ];
+        filename = 'Mau_danh_muc_san_pham.xlsx';
+        break;
+      case 'production':
+        data = [
+          {
+            'Ngày sản xuất': '2024-01-15',
+            'Mã sản phẩm': 'SP001',
+            'Tên sản phẩm': 'Bộ chăn ga đôi',
+            'Số lượng': 10,
+            'Ghi chú': 'Đơn hàng khách VIP'
+          },
+          {
+            'Ngày sản xuất': '2024-01-16',
+            'Mã sản phẩm': 'SP002',
+            'Tên sản phẩm': 'Gối ôm lông vũ',
+            'Số lượng': 25,
+            'Ghi chú': 'Đơn hàng xuất khẩu'
+          },
+          {
+            'Ngày sản xuất': '2024-01-17',
+            'Mã sản phẩm': 'SP003',
+            'Tên sản phẩm': 'Chăn đơn cotton',
+            'Số lượng': 15,
+            'Ghi chú': 'Đơn hàng nội địa'
+          }
+        ];
+        filename = 'Mau_theo_doi_san_xuat.xlsx';
+        break;
+      default:
+        return;
+    }
+    
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Dữ liệu mẫu');
+    XLSX.writeFile(wb, filename);
+    
+    alert(`✅ Đã tải file Excel mẫu: ${filename}\n\n💡 Hướng dẫn:\n1. Mở file và chỉnh sửa dữ liệu\n2. Lưu file\n3. Sử dụng nút "Nhập Excel" để import`);
+  };
+
+  // Excel Import/Export Functions
+  const exportToExcel = (dataType) => {
+    let data, filename, headers;
+    
+    switch(dataType) {
+      case 'fabrics':
+        data = fabrics.map(fabric => ({
+          'Mã vải': fabric.code,
+          'Chất liệu': fabric.material,
+          'Màu sắc': fabric.color,
+          'Khổ vải': fabric.width,
+          'Tồn kho (m)': fabric.currentLength,
+          'Đơn giá (đ)': fabric.price
+        }));
+        filename = 'Danh_muc_vai.xlsx';
+        break;
+      case 'products':
+        data = products.map(product => ({
+          'Mã sản phẩm': product.code,
+          'Tên sản phẩm': product.name,
+          'Loại': product.type,
+          'Mã vải': product.fabricCode,
+          'Định mức (m/bộ)': product.fabricUsage
+        }));
+        filename = 'Danh_muc_san_pham.xlsx';
+        break;
+      case 'production':
+        data = productionRecords.map(record => {
+          const product = products.find(p => p.code === record.productCode);
+          return {
+            'Ngày sản xuất': record.date,
+            'Mã sản phẩm': record.productCode,
+            'Tên sản phẩm': product ? product.name : '',
+            'Số lượng': record.quantity,
+            'Ghi chú': record.notes || ''
+          };
+        });
+        filename = 'Theo_doi_san_xuat.xlsx';
+        break;
+      case 'all':
+        // Create workbook with multiple sheets
+        const wb = XLSX.utils.book_new();
+        
+        // Fabrics sheet
+        const fabricsData = fabrics.map(fabric => ({
+          'Mã vải': fabric.code,
+          'Chất liệu': fabric.material,
+          'Màu sắc': fabric.color,
+          'Khổ vải': fabric.width,
+          'Tồn kho (m)': fabric.currentLength,
+          'Đơn giá (đ)': fabric.price
+        }));
+        const fabricsWS = XLSX.utils.json_to_sheet(fabricsData);
+        XLSX.utils.book_append_sheet(wb, fabricsWS, 'Danh mục vải');
+        
+        // Products sheet
+        const productsData = products.map(product => ({
+          'Mã sản phẩm': product.code,
+          'Tên sản phẩm': product.name,
+          'Loại': product.type,
+          'Mã vải': product.fabricCode,
+          'Định mức (m/bộ)': product.fabricUsage
+        }));
+        const productsWS = XLSX.utils.json_to_sheet(productsData);
+        XLSX.utils.book_append_sheet(wb, productsWS, 'Danh mục sản phẩm');
+        
+        // Production sheet
+        const productionData = productionRecords.map(record => {
+          const product = products.find(p => p.code === record.productCode);
+          return {
+            'Ngày sản xuất': record.date,
+            'Mã sản phẩm': record.productCode,
+            'Tên sản phẩm': product ? product.name : '',
+            'Số lượng': record.quantity,
+            'Ghi chú': record.notes || ''
+          };
+        });
+        const productionWS = XLSX.utils.json_to_sheet(productionData);
+        XLSX.utils.book_append_sheet(wb, productionWS, 'Theo dõi sản xuất');
+        
+        // Write file
+        XLSX.writeFile(wb, `Bao_cao_tong_hop_${new Date().toISOString().split('T')[0]}.xlsx`);
+        alert('✅ Đã xuất toàn bộ dữ liệu ra file Excel thành công!\n\n📊 File bao gồm:\n- Sheet 1: Danh mục vải\n- Sheet 2: Danh mục sản phẩm\n- Sheet 3: Theo dõi sản xuất');
+        return;
+      default:
+        return;
+    }
+    
+    if (data.length === 0) {
+      alert('❌ Không có dữ liệu để xuất!');
+      return;
+    }
+    
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+    XLSX.writeFile(wb, filename);
+    
+    alert(`✅ Đã xuất ${data.length} bản ghi ra file Excel: ${filename}`);
+  };
+
+  const handleExcelImport = (event, dataType) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+        if (jsonData.length === 0) {
+          alert('❌ File Excel không có dữ liệu!');
+          return;
+        }
+
+        if (dataType === 'fabrics') {
+          const requiredHeaders = ['Mã vải', 'Chất liệu'];
+          const headers = Object.keys(jsonData[0]);
+          const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
+          
+          if (missingHeaders.length > 0) {
+            alert(`❌ Thiếu cột bắt buộc: ${missingHeaders.join(', ')}\n\n💡 Cột cần có:\nMã vải, Chất liệu, Màu sắc, Khổ vải, Tồn kho (m), Đơn giá (đ)`);
+            return;
+          }
+          
+          const importedFabrics = jsonData.map((row, index) => {
+            const fabric = {
+              id: Date.now() + index,
+              code: row['Mã vải'] || '',
+              material: row['Chất liệu'] || '',
+              color: row['Màu sắc'] || '',
+              width: row['Khổ vải'] || '',
+              currentLength: parseFloat(row['Tồn kho (m)'] || row['Tồn kho'] || 0),
+              price: parseFloat(row['Đơn giá (đ)'] || row['Đơn giá'] || 0)
+            };
+            
+            if (!fabric.code || !fabric.material) {
+              throw new Error(`Dòng ${index + 2}: Thiếu mã vải hoặc chất liệu`);
+            }
+            return fabric;
+          });
+          
+          if (window.confirm(`🔍 Tìm thấy ${importedFabrics.length} vải hợp lệ từ file Excel.\n\n📥 Bạn có muốn thêm vào danh sách không?`)) {
+            setFabrics(prev => [...prev, ...importedFabrics]);
+            alert(`✅ Đã nhập thành công ${importedFabrics.length} vải từ Excel!`);
+          }
+          
+        } else if (dataType === 'products') {
+          const requiredHeaders = ['Mã sản phẩm', 'Tên sản phẩm'];
+          const headers = Object.keys(jsonData[0]);
+          const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
+          
+          if (missingHeaders.length > 0) {
+            alert(`❌ Thiếu cột bắt buộc: ${missingHeaders.join(', ')}\n\n💡 Cột cần có:\nMã sản phẩm, Tên sản phẩm, Loại, Mã vải, Định mức (m/bộ)`);
+            return;
+          }
+          
+          const importedProducts = jsonData.map((row, index) => {
+            const product = {
+              id: Date.now() + index,
+              code: row['Mã sản phẩm'] || '',
+              name: row['Tên sản phẩm'] || '',
+              type: row['Loại'] || '',
+              fabricCode: row['Mã vải'] || '',
+              fabricUsage: parseFloat(row['Định mức (m/bộ)'] || row['Định mức'] || 0)
+            };
+            
+            if (!product.code || !product.name) {
+              throw new Error(`Dòng ${index + 2}: Thiếu mã sản phẩm hoặc tên sản phẩm`);
+            }
+            return product;
+          });
+          
+          if (window.confirm(`🔍 Tìm thấy ${importedProducts.length} sản phẩm hợp lệ từ file Excel.\n\n📥 Bạn có muốn thêm vào danh sách không?`)) {
+            setProducts(prev => [...prev, ...importedProducts]);
+            alert(`✅ Đã nhập thành công ${importedProducts.length} sản phẩm từ Excel!`);
+          }
+        } else if (dataType === 'production') {
+          const requiredHeaders = ['Ngày sản xuất', 'Mã sản phẩm', 'Số lượng'];
+          const headers = Object.keys(jsonData[0]);
+          const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
+          
+          if (missingHeaders.length > 0) {
+            alert(`❌ Thiếu cột bắt buộc: ${missingHeaders.join(', ')}\n\n💡 Cột cần có:\nNgày sản xuất, Mã sản phẩm, Tên sản phẩm, Số lượng, Ghi chú`);
+            return;
+          }
+          
+          const importedRecords = jsonData.map((row, index) => {
+            const record = {
+              id: Date.now() + index,
+              date: row['Ngày sản xuất'] || '',
+              productCode: row['Mã sản phẩm'] || '',
+              quantity: parseInt(row['Số lượng'] || 0),
+              notes: row['Ghi chú'] || ''
+            };
+            
+            if (!record.date || !record.productCode || !record.quantity) {
+              throw new Error(`Dòng ${index + 2}: Thiếu ngày sản xuất, mã sản phẩm hoặc số lượng`);
+            }
+            return record;
+          });
+          
+          if (window.confirm(`🔍 Tìm thấy ${importedRecords.length} lệnh sản xuất hợp lệ từ file Excel.\n\n📥 Bạn có muốn thêm vào danh sách không?`)) {
+            setProductionRecords(prev => [...prev, ...importedRecords]);
+            alert(`✅ Đã nhập thành công ${importedRecords.length} lệnh sản xuất từ Excel!`);
+          }
+        }
+      } catch (error) {
+        alert(`❌ Lỗi đọc file Excel: ${error.message}\n\n💡 Vui lòng kiểm tra format file Excel.`);
+      }
+    };
+    
+    reader.readAsArrayBuffer(file);
+    event.target.value = ''; // Reset input
+  };
+
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
@@ -1043,6 +1452,27 @@ const FabricApp = () => {
                 style={{ display: 'none' }}
                 id="backup-file-input"
               />
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={(e) => handleExcelImport(e, 'fabrics')}
+                style={{ display: 'none' }}
+                id="excel-fabrics-input"
+              />
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={(e) => handleExcelImport(e, 'products')}
+                style={{ display: 'none' }}
+                id="excel-products-input"
+              />
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={(e) => handleExcelImport(e, 'production')}
+                style={{ display: 'none' }}
+                id="excel-production-input"
+              />
               <button
                 onClick={() => document.getElementById('backup-file-input').click()}
                 className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 text-sm"
@@ -1052,6 +1482,14 @@ const FabricApp = () => {
                 Khôi phục
               </button>
               <button
+                onClick={clearAllData}
+                className="bg-red-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-red-700 text-sm"
+                title="Xóa toàn bộ dữ liệu"
+              >
+                <Trash2 className="w-4 h-4" />
+                Xóa hết
+              </button>
+              <button
                 onClick={exportAllData}
                 className="bg-purple-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-purple-700 text-sm"
                 title="Backup toàn bộ dữ liệu"
@@ -1059,13 +1497,69 @@ const FabricApp = () => {
                 <Download className="w-4 h-4" />
                 Backup
               </button>
-              <button
-                onClick={exportReport}
-                className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700 text-sm"
-              >
-                <FileText className="w-4 h-4" />
-                Xuất báo cáo
-              </button>
+              <div className="relative">
+                <button
+                  onClick={() => setShowExportMenu(!showExportMenu)}
+                  className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700 text-sm"
+                  title="Xuất dữ liệu Excel"
+                >
+                  <FileText className="w-4 h-4" />
+                  Xuất Excel
+                </button>
+                {showExportMenu && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border z-50">
+                    <div className="py-1">
+                      <button
+                        onClick={() => {
+                          exportToExcel('fabrics');
+                          setShowExportMenu(false);
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      >
+                        📊 Danh mục vải
+                      </button>
+                      <button
+                        onClick={() => {
+                          exportToExcel('products');
+                          setShowExportMenu(false);
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      >
+                        🛍️ Danh mục sản phẩm
+                      </button>
+                      <button
+                        onClick={() => {
+                          exportToExcel('production');
+                          setShowExportMenu(false);
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      >
+                        🏭 Theo dõi sản xuất
+                      </button>
+                      <hr className="my-1" />
+                      <button
+                        onClick={() => {
+                          exportToExcel('all');
+                          setShowExportMenu(false);
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 font-semibold"
+                      >
+                        📋 Tất cả (nhiều sheet)
+                      </button>
+                      <hr className="my-1" />
+                      <button
+                        onClick={() => {
+                          exportReport();
+                          setShowExportMenu(false);
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      >
+                        📄 Báo cáo HTML
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -1237,9 +1731,26 @@ const FabricApp = () => {
                     setShowImportModal(true);
                   }}
                   className="bg-orange-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-orange-700 text-sm"
+                  title="Nhập dữ liệu CSV"
                 >
                   <Upload className="w-4 h-4" />
-                  Nhập dữ liệu
+                  Nhập CSV
+                </button>
+                <button
+                  onClick={() => exportExcelWithSampleData('fabrics')}
+                  className="bg-indigo-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 text-sm"
+                  title="Tải file Excel mẫu"
+                >
+                  <Download className="w-4 h-4" />
+                  Mẫu Excel
+                </button>
+                <button
+                  onClick={() => document.getElementById('excel-fabrics-input').click()}
+                  className="bg-green-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700 text-sm"
+                  title="Nhập dữ liệu từ file Excel"
+                >
+                  <FileText className="w-4 h-4" />
+                  Nhập Excel
                 </button>
                 <button 
                   onClick={() => setShowFabricModal(true)}
@@ -1252,19 +1763,20 @@ const FabricApp = () => {
             </div>
             
             <div className="bg-white rounded-lg shadow overflow-hidden">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mã vải</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Chất liệu</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Màu sắc</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Khổ vải</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tồn kho (m)</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Đơn giá</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Giá trị</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Thao tác</th>
-                  </tr>
-                </thead>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-max">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Mã vải</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Chất liệu</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Màu sắc</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Khổ vải</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Tồn kho (m)</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Đơn giá</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Giá trị</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Thao tác</th>
+                    </tr>
+                  </thead>
                 <tbody className="divide-y divide-gray-200">
                 {fabrics.length === 0 ? (
                   <tr>
@@ -1318,7 +1830,8 @@ const FabricApp = () => {
                   ))
                 )}
                 </tbody>
-              </table>
+                </table>
+              </div>
             </div>
           </div>
         )}
@@ -1343,9 +1856,26 @@ const FabricApp = () => {
                     setShowImportModal(true);
                   }}
                   className="bg-orange-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-orange-700 text-sm"
+                  title="Nhập dữ liệu CSV"
                 >
                   <Upload className="w-4 h-4" />
-                  Nhập dữ liệu
+                  Nhập CSV
+                </button>
+                <button
+                  onClick={() => exportExcelWithSampleData('products')}
+                  className="bg-indigo-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 text-sm"
+                  title="Tải file Excel mẫu"
+                >
+                  <Download className="w-4 h-4" />
+                  Mẫu Excel
+                </button>
+                <button
+                  onClick={() => document.getElementById('excel-products-input').click()}
+                  className="bg-green-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700 text-sm"
+                  title="Nhập dữ liệu từ file Excel"
+                >
+                  <FileText className="w-4 h-4" />
+                  Nhập Excel
                 </button>
                 <button
                   onClick={handleDeleteAllProducts}
@@ -1366,17 +1896,18 @@ const FabricApp = () => {
             </div>
             
             <div className="bg-white rounded-lg shadow overflow-hidden">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mã sản phẩm</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tên sản phẩm</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Loại</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mã vải</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Định mức (m/bộ)</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Thao tác</th>
-                  </tr>
-                </thead>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-max">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Mã sản phẩm</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Tên sản phẩm</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Loại</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Mã vải</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Định mức (m/bộ)</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Thao tác</th>
+                    </tr>
+                  </thead>
                 <tbody className="divide-y divide-gray-200">
                 {products.length === 0 ? (
                   <tr>
@@ -1419,7 +1950,8 @@ const FabricApp = () => {
                   ))
                 )}
                 </tbody>
-              </table>
+                </table>
+              </div>
             </div>
           </div>
         )}
@@ -1435,7 +1967,23 @@ const FabricApp = () => {
                   className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700 text-sm"
                 >
                   <Download className="w-4 h-4" />
-                  Xuất dữ liệu
+                  Xuất CSV
+                </button>
+                <button
+                  onClick={() => exportExcelWithSampleData('production')}
+                  className="bg-indigo-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 text-sm"
+                  title="Tải file Excel mẫu"
+                >
+                  <Download className="w-4 h-4" />
+                  Mẫu Excel
+                </button>
+                <button
+                  onClick={() => document.getElementById('excel-production-input').click()}
+                  className="bg-purple-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-purple-700 text-sm"
+                  title="Nhập dữ liệu từ file Excel"
+                >
+                  <FileText className="w-4 h-4" />
+                  Nhập Excel
                 </button>
                 <button
                   onClick={() => setShowProductionModal(true)}
@@ -1448,19 +1996,20 @@ const FabricApp = () => {
             </div>
             
             <div className="bg-white rounded-lg shadow overflow-hidden">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ngày</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mã sản phẩm</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tên sản phẩm</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Số lượng</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vải đã dùng</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Giá trị vải</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ghi chú</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Thao tác</th>
-                  </tr>
-                </thead>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-max">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Ngày</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Mã sản phẩm</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Tên sản phẩm</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Số lượng</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Vải đã dùng</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Giá trị vải</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Ghi chú</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Thao tác</th>
+                    </tr>
+                  </thead>
                 <tbody className="divide-y divide-gray-200">
                 {productionRecords.length === 0 ? (
                   <tr>
@@ -1498,7 +2047,8 @@ const FabricApp = () => {
                   ))
                 )}
                 </tbody>
-              </table>
+                </table>
+              </div>
             </div>
           </div>
         )}
