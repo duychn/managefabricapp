@@ -15,7 +15,6 @@ const FabricApp = () => {
   const [showProductModal, setShowProductModal] = useState(false);
   const [showProductionModal, setShowProductionModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
-  const [showGuideModal, setShowGuideModal] = useState(false);
   const [importType, setImportType] = useState('');
   const [importText, setImportText] = useState('');
   
@@ -933,225 +932,6 @@ const FabricApp = () => {
     event.target.value = ''; // Reset input
   };
 
-  // Excel Export functions
-  const exportToExcel = (dataType) => {
-    try {
-      let data = [];
-      let filename = '';
-      let sheetName = '';
-
-      if (dataType === 'fabrics') {
-        data = fabrics.map(fabric => ({
-          'Mã vải': fabric.code,
-          'Chất liệu': fabric.material,
-          'Màu sắc': fabric.color,
-          'Khổ vải': fabric.width,
-          'Tồn kho (m)': fabric.currentLength,
-          'Đơn giá (đ)': fabric.price,
-          'Giá trị (đ)': fabric.currentLength * fabric.price
-        }));
-        filename = 'danh_muc_vai';
-        sheetName = 'Danh mục vải';
-      } else if (dataType === 'products') {
-        data = products.map(product => ({
-          'Mã sản phẩm': product.code,
-          'Tên sản phẩm': product.name,
-          'Loại': product.type,
-          'Mã vải': product.fabricCode,
-          'Định mức (m/bộ)': product.fabricUsage
-        }));
-        filename = 'danh_muc_san_pham';
-        sheetName = 'Sản phẩm';
-      } else if (dataType === 'production') {
-        data = productionRecords.map(record => ({
-          'Ngày': record.date,
-          'Mã sản phẩm': record.productCode,
-          'Tên sản phẩm': record.productName,
-          'Số lượng': record.quantity,
-          'Vải sử dụng (m)': record.fabricUsed,
-          'Giá trị (đ)': record.fabricValue,
-          'Ghi chú': record.notes || ''
-        }));
-        filename = 'lich_su_san_xuat';
-        sheetName = 'Sản xuất';
-      }
-
-      if (data.length === 0) {
-        alert('❌ Không có dữ liệu để xuất!');
-        return;
-      }
-
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.json_to_sheet(data);
-      XLSX.utils.book_append_sheet(wb, ws, sheetName);
-      XLSX.writeFile(wb, `${filename}_${new Date().toISOString().split('T')[0]}.xlsx`);
-      
-      alert(`✅ Đã xuất ${data.length} dòng dữ liệu ${sheetName} ra file Excel!`);
-    } catch (error) {
-      alert('❌ Lỗi xuất Excel: ' + error.message);
-    }
-  };
-
-  // Excel Import functions
-  const handleExcelImport = (file, dataType) => {
-    try {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const data = new Uint8Array(e.target.result);
-          const workbook = XLSX.read(data, { type: 'array' });
-          const sheetName = workbook.SheetNames[0];
-          const sheet = workbook.Sheets[sheetName];
-          const jsonData = XLSX.utils.sheet_to_json(sheet);
-
-          if (jsonData.length === 0) {
-            alert('❌ File Excel không có dữ liệu!');
-            return;
-          }
-
-          if (dataType === 'fabrics') {
-            const requiredColumns = ['Mã vải', 'Chất liệu'];
-            const firstRow = jsonData[0];
-            const missingColumns = requiredColumns.filter(col => 
-              !Object.keys(firstRow).some(key => key.includes(col.split(' ')[0]))
-            );
-
-            if (missingColumns.length > 0) {
-              alert(`❌ Thiếu cột bắt buộc: ${missingColumns.join(', ')}\n\n💡 Cần có các cột: Mã vải, Chất liệu`);
-              return;
-            }
-
-            const importedFabrics = jsonData.map((row, index) => ({
-              id: Date.now() + index,
-              code: row['Mã vải'] || row['Ma vai'] || '',
-              material: row['Chất liệu'] || row['Chat lieu'] || '',
-              color: row['Màu sắc'] || row['Mau sac'] || '',
-              width: row['Khổ vải'] || row['Kho vai'] || '',
-              currentLength: parseFloat(row['Tồn kho (m)'] || row['Ton kho'] || 0),
-              price: parseFloat(row['Đơn giá (đ)'] || row['Don gia'] || 0)
-            }));
-
-            if (window.confirm(`🔍 Tìm thấy ${importedFabrics.length} vải.\n\n📥 Bạn có muốn nhập vào danh mục không?`)) {
-              setFabrics(prev => [...prev, ...importedFabrics]);
-              alert(`✅ Đã nhập thành công ${importedFabrics.length} vải!`);
-            }
-
-          } else if (dataType === 'products') {
-            const importedProducts = jsonData.map((row, index) => ({
-              id: Date.now() + index,
-              code: row['Mã sản phẩm'] || row['Ma san pham'] || '',
-              name: row['Tên sản phẩm'] || row['Ten san pham'] || '',
-              type: row['Loại'] || row['Loai'] || '',
-              fabricCode: row['Mã vải'] || row['Ma vai'] || '',
-              fabricUsage: parseFloat(row['Định mức (m/bộ)'] || row['Dinh muc'] || 0)
-            }));
-
-            if (window.confirm(`🔍 Tìm thấy ${importedProducts.length} sản phẩm.\n\n📥 Bạn có muốn nhập vào danh mục không?`)) {
-              setProducts(prev => [...prev, ...importedProducts]);
-              alert(`✅ Đã nhập thành công ${importedProducts.length} sản phẩm!`);
-            }
-
-          } else if (dataType === 'production') {
-            const importedProduction = jsonData.map((row, index) => ({
-              id: Date.now() + index,
-              date: row['Ngày'] || row['Ngay'] || '',
-              productCode: row['Mã sản phẩm'] || row['Ma san pham'] || '',
-              productName: row['Tên sản phẩm'] || row['Ten san pham'] || '',
-              quantity: parseInt(row['Số lượng'] || row['So luong'] || 0),
-              fabricUsed: parseFloat(row['Vải sử dụng (m)'] || row['Vai su dung'] || 0),
-              fabricValue: parseFloat(row['Giá trị (đ)'] || row['Gia tri'] || 0),
-              notes: row['Ghi chú'] || row['Ghi chu'] || ''
-            }));
-
-            if (window.confirm(`🔍 Tìm thấy ${importedProduction.length} lệnh sản xuất.\n\n📥 Bạn có muốn nhập vào danh mục không?`)) {
-              setProductionRecords(prev => [...prev, ...importedProduction]);
-              alert(`✅ Đã nhập thành công ${importedProduction.length} lệnh sản xuất!`);
-            }
-          }
-        } catch (error) {
-          alert('❌ Lỗi đọc file Excel: ' + error.message);
-        }
-      };
-      reader.readAsArrayBuffer(file);
-    } catch (error) {
-      alert('❌ Lỗi import Excel: ' + error.message);
-    }
-  };
-
-  // Sample Excel data functions
-  const downloadSampleExcel = (dataType) => {
-    try {
-      let sampleData = [];
-      let filename = '';
-      let sheetName = '';
-
-      if (dataType === 'fabrics') {
-        sampleData = [
-          {
-            'Mã vải': 'VAI001',
-            'Chất liệu': 'Cotton',
-            'Màu sắc': 'Trắng',
-            'Khổ vải': '1.6m',
-            'Tồn kho (m)': 200,
-            'Đơn giá (đ)': 55000
-          },
-          {
-            'Mã vải': 'VAI002',
-            'Chất liệu': 'Polyester',
-            'Màu sắc': 'Xanh dương',
-            'Khổ vải': '2.0m',
-            'Tồn kho (m)': 120,
-            'Đơn giá (đ)': 48000
-          }
-        ];
-        filename = 'mau_danh_muc_vai';
-        sheetName = 'Mẫu vải';
-      } else if (dataType === 'products') {
-        sampleData = [
-          {
-            'Mã sản phẩm': 'SP001',
-            'Tên sản phẩm': 'Bộ chăn ga đôi',
-            'Loại': 'Bộ chăn ga',
-            'Mã vải': 'VAI001',
-            'Định mức (m/bộ)': 5.5
-          },
-          {
-            'Mã sản phẩm': 'SP002',
-            'Tên sản phẩm': 'Gối ôm lông vũ',
-            'Loại': 'Gối',
-            'Mã vải': 'VAI002',
-            'Định mức (m/bộ)': 1.2
-          }
-        ];
-        filename = 'mau_danh_muc_san_pham';
-        sheetName = 'Mẫu sản phẩm';
-      } else if (dataType === 'production') {
-        sampleData = [
-          {
-            'Ngày': '2024-01-15',
-            'Mã sản phẩm': 'SP001',
-            'Tên sản phẩm': 'Bộ chăn ga đôi',
-            'Số lượng': 10,
-            'Vải sử dụng (m)': 55,
-            'Giá trị (đ)': 3025000,
-            'Ghi chú': 'Đơn hàng khách VIP'
-          }
-        ];
-        filename = 'mau_lich_su_san_xuat';
-        sheetName = 'Mẫu sản xuất';
-      }
-
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.json_to_sheet(sampleData);
-      XLSX.utils.book_append_sheet(wb, ws, sheetName);
-      XLSX.writeFile(wb, `${filename}.xlsx`);
-      
-      alert(`✅ Đã tải file Excel mẫu cho ${sheetName}!\n\n💡 Chỉnh sửa file này và import lại vào hệ thống.`);
-    } catch (error) {
-      alert('❌ Lỗi tạo file mẫu: ' + error.message);
-    }
-  };
-
   // Import functions
   const handleTextImport = () => {
     try {
@@ -1257,14 +1037,6 @@ const FabricApp = () => {
               <h1 className="text-2xl font-bold text-gray-900">Quản Lý Vải May</h1>
             </div>
             <div className="flex items-center gap-3">
-              <button
-                onClick={() => setShowGuideModal(true)}
-                className="bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-orange-700 text-sm"
-                title="Hướng dẫn sử dụng"
-              >
-                <HelpCircle className="w-4 h-4" />
-                Hướng dẫn
-              </button>
               <input
                 type="file"
                 accept=".json"
@@ -1453,48 +1225,12 @@ const FabricApp = () => {
               <h2 className="text-2xl font-bold">Danh mục vải</h2>
               <div className="flex gap-2">
                 <button
-                  onClick={() => exportToExcel('fabrics')}
+                  onClick={exportFabrics}
                   className="bg-green-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700 text-sm"
                 >
-                  <FileSpreadsheet className="w-4 h-4" />
-                  Xuất Excel
-                </button>
-                <button
-                  onClick={() => downloadSampleExcel('fabrics')}
-                  className="bg-indigo-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 text-sm"
-                >
                   <Download className="w-4 h-4" />
-                  Mẫu Excel
+                  Xuất dữ liệu
                 </button>
-                <button
-                  onClick={exportFabrics}
-                  className="bg-teal-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-teal-700 text-sm"
-                >
-                  <Download className="w-4 h-4" />
-                  Xuất CSV
-                </button>
-                <div className="relative">
-                  <input
-                    type="file"
-                    accept=".xlsx,.xls"
-                    onChange={(e) => {
-                      const file = e.target.files[0];
-                      if (file) {
-                        handleExcelImport(file, 'fabrics');
-                        e.target.value = '';
-                      }
-                    }}
-                    style={{ display: 'none' }}
-                    id="excel-import-fabrics"
-                  />
-                  <button
-                    onClick={() => document.getElementById('excel-import-fabrics').click()}
-                    className="bg-blue-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 text-sm"
-                  >
-                    <Upload className="w-4 h-4" />
-                    Import Excel
-                  </button>
-                </div>
                 <button
                   onClick={() => {
                     setImportType('fabrics');
@@ -1504,7 +1240,7 @@ const FabricApp = () => {
                   className="bg-orange-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-orange-700 text-sm"
                 >
                   <Upload className="w-4 h-4" />
-                  Import CSV
+                  Nhập dữ liệu
                 </button>
                 <button 
                   onClick={() => setShowFabricModal(true)}
@@ -1517,20 +1253,19 @@ const FabricApp = () => {
             </div>
             
             <div className="bg-white rounded-lg shadow overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[800px]">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mã vải</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Chất liệu</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Màu sắc</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Khổ vải</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tồn kho (m)</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Đơn giá</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Giá trị</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Thao tác</th>
-                    </tr>
-                  </thead>
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mã vải</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Chất liệu</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Màu sắc</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Khổ vải</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tồn kho (m)</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Đơn giá</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Giá trị</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Thao tác</th>
+                  </tr>
+                </thead>
                 <tbody className="divide-y divide-gray-200">
                 {fabrics.length === 0 ? (
                   <tr>
@@ -1584,8 +1319,7 @@ const FabricApp = () => {
                   ))
                 )}
                 </tbody>
-                </table>
-              </div>
+              </table>
             </div>
           </div>
         )}
@@ -1597,48 +1331,12 @@ const FabricApp = () => {
               <h2 className="text-2xl font-bold">Danh mục sản phẩm</h2>
               <div className="flex gap-2">
                 <button
-                  onClick={() => exportToExcel('products')}
+                  onClick={exportProducts}
                   className="bg-green-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700 text-sm"
                 >
-                  <FileSpreadsheet className="w-4 h-4" />
-                  Xuất Excel
-                </button>
-                <button
-                  onClick={() => downloadSampleExcel('products')}
-                  className="bg-indigo-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 text-sm"
-                >
                   <Download className="w-4 h-4" />
-                  Mẫu Excel
+                  Xuất dữ liệu
                 </button>
-                <button
-                  onClick={exportProducts}
-                  className="bg-teal-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-teal-700 text-sm"
-                >
-                  <Download className="w-4 h-4" />
-                  Xuất CSV
-                </button>
-                <div className="relative">
-                  <input
-                    type="file"
-                    accept=".xlsx,.xls"
-                    onChange={(e) => {
-                      const file = e.target.files[0];
-                      if (file) {
-                        handleExcelImport(file, 'products');
-                        e.target.value = '';
-                      }
-                    }}
-                    style={{ display: 'none' }}
-                    id="excel-import-products"
-                  />
-                  <button
-                    onClick={() => document.getElementById('excel-import-products').click()}
-                    className="bg-blue-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 text-sm"
-                  >
-                    <Upload className="w-4 h-4" />
-                    Import Excel
-                  </button>
-                </div>
                 <button
                   onClick={() => {
                     setImportType('products');
@@ -1648,7 +1346,7 @@ const FabricApp = () => {
                   className="bg-orange-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-orange-700 text-sm"
                 >
                   <Upload className="w-4 h-4" />
-                  Import CSV
+                  Nhập dữ liệu
                 </button>
                 <button
                   onClick={handleDeleteAllProducts}
@@ -1669,18 +1367,17 @@ const FabricApp = () => {
             </div>
             
             <div className="bg-white rounded-lg shadow overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[700px]">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mã sản phẩm</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tên sản phẩm</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Loại</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mã vải</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Định mức (m/bộ)</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Thao tác</th>
-                    </tr>
-                  </thead>
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mã sản phẩm</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tên sản phẩm</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Loại</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mã vải</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Định mức (m/bộ)</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Thao tác</th>
+                  </tr>
+                </thead>
                 <tbody className="divide-y divide-gray-200">
                 {products.length === 0 ? (
                   <tr>
@@ -1723,8 +1420,7 @@ const FabricApp = () => {
                   ))
                 )}
                 </tbody>
-                </table>
-              </div>
+              </table>
             </div>
           </div>
         )}
@@ -1734,50 +1430,14 @@ const FabricApp = () => {
           <div className="space-y-6">
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-bold">Theo dõi sản xuất</h2>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => exportToExcel('production')}
-                  className="bg-green-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700 text-sm"
-                >
-                  <FileSpreadsheet className="w-4 h-4" />
-                  Xuất Excel
-                </button>
-                <button
-                  onClick={() => downloadSampleExcel('production')}
-                  className="bg-indigo-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 text-sm"
-                >
-                  <Download className="w-4 h-4" />
-                  Mẫu Excel
-                </button>
+              <div className="flex gap-3">
                 <button
                   onClick={exportProduction}
-                  className="bg-teal-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-teal-700 text-sm"
+                  className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700 text-sm"
                 >
                   <Download className="w-4 h-4" />
-                  Xuất CSV
+                  Xuất dữ liệu
                 </button>
-                <div className="relative">
-                  <input
-                    type="file"
-                    accept=".xlsx,.xls"
-                    onChange={(e) => {
-                      const file = e.target.files[0];
-                      if (file) {
-                        handleExcelImport(file, 'production');
-                        e.target.value = '';
-                      }
-                    }}
-                    style={{ display: 'none' }}
-                    id="excel-import-production"
-                  />
-                  <button
-                    onClick={() => document.getElementById('excel-import-production').click()}
-                    className="bg-blue-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 text-sm"
-                  >
-                    <Upload className="w-4 h-4" />
-                    Import Excel
-                  </button>
-                </div>
                 <button
                   onClick={() => setShowProductionModal(true)}
                   className="bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-orange-700"
@@ -1789,20 +1449,19 @@ const FabricApp = () => {
             </div>
             
             <div className="bg-white rounded-lg shadow overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[900px]">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ngày</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mã sản phẩm</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tên sản phẩm</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Số lượng</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vải đã dùng</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Giá trị vải</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ghi chú</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Thao tác</th>
-                    </tr>
-                  </thead>
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ngày</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mã sản phẩm</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tên sản phẩm</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Số lượng</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vải đã dùng</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Giá trị vải</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ghi chú</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Thao tác</th>
+                  </tr>
+                </thead>
                 <tbody className="divide-y divide-gray-200">
                 {productionRecords.length === 0 ? (
                   <tr>
@@ -1840,8 +1499,7 @@ const FabricApp = () => {
                   ))
                 )}
                 </tbody>
-                </table>
-              </div>
+              </table>
             </div>
           </div>
         )}
@@ -2294,153 +1952,6 @@ const FabricApp = () => {
                   className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 text-sm font-medium"
                 >
                   Đã hiểu, bắt đầu sử dụng! 🚀
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Guide Modal */}
-      {showGuideModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-blue-600 flex items-center gap-2">
-                  <HelpCircle className="w-6 h-6" />
-                  📚 Hướng dẫn sử dụng App Quản lý Vải May
-                </h2>
-                <button
-                  onClick={() => setShowGuideModal(false)}
-                  className="text-gray-500 hover:text-gray-700"
-                >
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-
-              <div className="space-y-6">
-                {/* Tổng quan */}
-                <div className="bg-blue-50 p-4 rounded-lg border-l-4 border-blue-500">
-                  <h3 className="text-lg font-semibold text-blue-800 mb-3">🎯 Tổng quan</h3>
-                  <p className="text-blue-700">
-                    App Quản lý Vải May giúp bạn quản lý kho vải, sản phẩm và theo dõi sản xuất một cách hiệu quả. 
-                    Hệ thống bao gồm 4 tab chính: Tổng quan, Danh mục vải, Sản phẩm và Sản xuất.
-                  </p>
-                </div>
-
-                {/* Dashboard */}
-                <div className="bg-white border rounded-lg p-4">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                    <TrendingUp className="w-5 h-5 text-blue-500" />
-                    📊 Tab Tổng quan
-                  </h3>
-                  <ul className="space-y-2 text-gray-700">
-                    <li>• <strong>Thống kê tổng quan:</strong> Hiển thị tổng loại vải, giá trị tồn kho, vải sắp hết</li>
-                    <li>• <strong>Cảnh báo vải sắp hết:</strong> Tự động cảnh báo các loại vải có tồn kho < 150m</li>
-                    <li>• <strong>Lịch sử sản xuất gần đây:</strong> Hiển thị 5 lệnh sản xuất mới nhất</li>
-                  </ul>
-                </div>
-
-                {/* Fabrics */}
-                <div className="bg-white border rounded-lg p-4">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                    <Package className="w-5 h-5 text-green-500" />
-                    🧵 Tab Danh mục vải
-                  </h3>
-                  <ul className="space-y-2 text-gray-700">
-                    <li>• <strong>Thêm vải mới:</strong> Nhập mã vải, chất liệu, màu sắc, khổ vải, tồn kho và đơn giá</li>
-                    <li>• <strong>Xuất Excel:</strong> Xuất toàn bộ danh mục vải ra file Excel</li>
-                    <li>• <strong>Mẫu Excel:</strong> Tải file Excel mẫu để nhập dữ liệu hàng loạt</li>
-                    <li>• <strong>Import Excel:</strong> Nhập dữ liệu từ file Excel (nhanh hơn CSV)</li>
-                    <li>• <strong>Sao chép vải:</strong> Nhân bản nhanh vải có thuộc tính tương tự</li>
-                    <li>• <strong>Cảnh báo tồn kho:</strong> Tự động hiển thị vải cần nhập hàng (< 150m)</li>
-                  </ul>
-                </div>
-
-                {/* Products */}
-                <div className="bg-white border rounded-lg p-4">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                    <Warehouse className="w-5 h-5 text-purple-500" />
-                    📦 Tab Sản phẩm
-                  </h3>
-                  <ul className="space-y-2 text-gray-700">
-                    <li>• <strong>Thêm sản phẩm:</strong> Nhập mã, tên, loại, mã vải sử dụng và định mức vải/bộ</li>
-                    <li>• <strong>Xuất/Import Excel:</strong> Tương tự như tab vải, hỗ trợ đầy đủ Excel</li>
-                    <li>• <strong>Quản lý định mức:</strong> Thiết lập lượng vải cần thiết cho mỗi sản phẩm</li>
-                    <li>• <strong>Sao chép sản phẩm:</strong> Tạo nhanh sản phẩm có cấu hình tương tự</li>
-                  </ul>
-                </div>
-
-                {/* Production */}
-                <div className="bg-white border rounded-lg p-4">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                    <Package className="w-5 h-5 text-orange-500" />
-                    🏭 Tab Sản xuất
-                  </h3>
-                  <ul className="space-y-2 text-gray-700">
-                    <li>• <strong>Thêm lệnh sản xuất:</strong> Chọn sản phẩm, nhập số lượng, hệ thống tự tính vải cần dùng</li>
-                    <li>• <strong>Xuất/Import Excel:</strong> Quản lý lịch sử sản xuất bằng Excel</li>
-                    <li>• <strong>Tự động tính toán:</strong> Hệ thống tự động trừ vải tồn kho và tính giá trị</li>
-                    <li>• <strong>Ghi chú sản xuất:</strong> Thêm ghi chú cho từng lệnh sản xuất</li>
-                  </ul>
-                </div>
-
-                {/* Import/Export */}
-                <div className="bg-green-50 p-4 rounded-lg border-l-4 border-green-500">
-                  <h3 className="text-lg font-semibold text-green-800 mb-3">📁 Import/Export dữ liệu</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-green-700">
-                    <div>
-                      <h4 className="font-semibold mb-2">📊 Xuất dữ liệu:</h4>
-                      <ul className="space-y-1 text-sm">
-                        <li>• <strong>Xuất Excel:</strong> Format chuẩn, dễ chỉnh sửa</li>
-                        <li>• <strong>Xuất CSV:</strong> Text thuần, tương thích cao</li>
-                        <li>• <strong>Xuất báo cáo HTML:</strong> Báo cáo đẹp, in được</li>
-                        <li>• <strong>Backup JSON:</strong> Lưu toàn bộ dữ liệu</li>
-                      </ul>
-                    </div>
-                    <div>
-                      <h4 className="font-semibold mb-2">📥 Nhập dữ liệu:</h4>
-                      <ul className="space-y-1 text-sm">
-                        <li>• <strong>Import Excel:</strong> Nhanh nhất, auto-detect columns</li>
-                        <li>• <strong>Import CSV:</strong> Copy/paste text vào modal</li>
-                        <li>• <strong>Khôi phục JSON:</strong> Restore toàn bộ hệ thống</li>
-                        <li>• <strong>File mẫu:</strong> Tải về để tham khảo format</li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Tips */}
-                <div className="bg-yellow-50 p-4 rounded-lg border-l-4 border-yellow-500">
-                  <h3 className="text-lg font-semibold text-yellow-800 mb-3">💡 Mẹo sử dụng</h3>
-                  <ul className="space-y-2 text-yellow-700">
-                    <li>• <strong>Backup thường xuyên:</strong> Dữ liệu mất khi refresh, hãy backup định kỳ</li>
-                    <li>• <strong>Dùng Excel cho import hàng loạt:</strong> Nhanh hơn nhập từng dòng</li>
-                    <li>• <strong>Kiểm tra mã vải:</strong> Đảm bảo mã vải trong sản phẩm tồn tại trong danh mục vải</li>
-                    <li>• <strong>Theo dõi tồn kho:</strong> Chú ý cảnh báo vải sắp hết để nhập hàng kịp thời</li>
-                    <li>• <strong>Sử dụng function sao chép:</strong> Tiết kiệm thời gian khi tạo item tương tự</li>
-                  </ul>
-                </div>
-
-                {/* Responsive */}
-                <div className="bg-purple-50 p-4 rounded-lg border-l-4 border-purple-500">
-                  <h3 className="text-lg font-semibold text-purple-800 mb-3">📱 Sử dụng trên Mobile</h3>
-                  <ul className="space-y-2 text-purple-700">
-                    <li>• <strong>Bảng có thể scroll ngang:</strong> Vuốt sang trái/phải để xem hết cột</li>
-                    <li>• <strong>Responsive design:</strong> Tự động điều chỉnh giao diện theo màn hình</li>
-                    <li>• <strong>Touch-friendly:</strong> Các nút được thiết kế cho cảm ứng</li>
-                  </ul>
-                </div>
-              </div>
-
-              <div className="mt-8 flex justify-end">
-                <button
-                  onClick={() => setShowGuideModal(false)}
-                  className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
-                >
-                  <span>Đã hiểu</span>
-                  <span>✨</span>
                 </button>
               </div>
             </div>
