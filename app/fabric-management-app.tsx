@@ -38,6 +38,7 @@ const FabricApp = () => {
 
   // Notification states
   const [showWelcomeNotification, setShowWelcomeNotification] = useState(false);
+  const [showHelpModal, setShowHelpModal] = useState(false);
 
   // Initialize with sample data and welcome notification
   useEffect(() => {
@@ -502,6 +503,22 @@ const FabricApp = () => {
         fabricUsageStats[fabricCode].productionCount += 1;
       });
 
+      // Thống kê theo tháng
+      const monthlyStats = {};
+      productionRecords.forEach(record => {
+        const month = record.date.substring(0, 7); // YYYY-MM
+        if (!monthlyStats[month]) {
+          monthlyStats[month] = {
+            totalProduction: 0,
+            totalFabricUsed: 0,
+            totalValue: 0
+          };
+        }
+        monthlyStats[month].totalProduction += record.quantity;
+        monthlyStats[month].totalFabricUsed += record.fabricUsed;
+        monthlyStats[month].totalValue += record.fabricValue || 0;
+      });
+
       // Tạo HTML báo cáo
       const reportDate = new Date().toLocaleDateString('vi-VN');
       const reportTime = new Date().toLocaleTimeString('vi-VN');
@@ -513,6 +530,7 @@ const FabricApp = () => {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Báo Cáo Quản Lý Vải May - ${reportDate}</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         * {
             margin: 0;
@@ -686,6 +704,49 @@ const FabricApp = () => {
             color: #666;
             font-style: italic;
         }
+        
+        .chart-container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin: 20px 0;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .chart-title {
+            font-size: 1.4em;
+            margin-bottom: 20px;
+            color: #2c3e50;
+            text-align: center;
+        }
+        
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 30px;
+            margin: 30px 0;
+        }
+        
+        .metric-highlight {
+            background: linear-gradient(45deg, #3498db, #2980b9);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            display: inline-block;
+            margin: 5px;
+            font-weight: bold;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .trend-up {
+            color: #27ae60;
+            font-weight: bold;
+        }
+        
+        .trend-down {
+            color: #e74c3c;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -712,6 +773,18 @@ const FabricApp = () => {
                 <div class="stat-card purple">
                     <div class="stat-number">${Math.round(totalUsed * 10) / 10}</div>
                     <div class="stat-label">Tổng vải đã dùng (m)</div>
+                </div>
+            </div>
+            
+            <!-- Charts Section -->
+            <div class="charts-grid">
+                <div class="chart-container">
+                    <div class="chart-title">📊 Phân Bố Giá Trị Vải Tồn Kho</div>
+                    <canvas id="fabricValueChart" width="400" height="200"></canvas>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-title">📈 Xu Hướng Sản Xuất Theo Tháng</div>
+                    <canvas id="monthlyTrendChart" width="400" height="200"></canvas>
                 </div>
             </div>
             
@@ -811,6 +884,41 @@ const FabricApp = () => {
             </div>
             
             <div class="section">
+                <h2 class="section-title">📅 Thống Kê Theo Tháng</h2>
+                ${Object.keys(monthlyStats).length > 0 ? `
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Tháng</th>
+                            <th>Sản Lượng (bộ)</th>
+                            <th>Vải Sử Dụng (m)</th>
+                            <th>Giá Trị (đ)</th>
+                            <th>Hiệu Suất</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${Object.entries(monthlyStats).map(([month, stats]) => `
+                        <tr>
+                            <td><strong>${month}</strong></td>
+                            <td><span class="metric-highlight">${stats.totalProduction}</span></td>
+                            <td>${Math.round(stats.totalFabricUsed * 10) / 10}m</td>
+                            <td>${stats.totalValue.toLocaleString()}đ</td>
+                            <td>
+                                ${stats.totalProduction > 10 ? 
+                                  '<span class="trend-up">🔥 Cao</span>' : 
+                                  stats.totalProduction > 5 ? 
+                                  '<span class="success">📈 Trung bình</span>' : 
+                                  '<span class="trend-down">📉 Thấp</span>'
+                                }
+                            </td>
+                        </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+                ` : '<div class="no-data">Chưa có dữ liệu theo tháng</div>'}
+            </div>
+            
+            <div class="section">
                 <h2 class="section-title">📊 Tổng Kết</h2>
                 <table class="table">
                     <tbody>
@@ -848,6 +956,101 @@ const FabricApp = () => {
             <p>Báo cáo này được xuất vào ${reportDate} lúc ${reportTime}</p>
         </div>
     </div>
+    
+    <script>
+        // Fabric Value Distribution Chart
+        const fabricValueCtx = document.getElementById('fabricValueChart').getContext('2d');
+        const fabricData = ${JSON.stringify(fabrics.map(f => ({
+          label: f.code,
+          value: f.currentLength * f.price
+        })))};
+        
+        new Chart(fabricValueCtx, {
+            type: 'doughnut',
+            data: {
+                labels: fabricData.map(f => f.label),
+                datasets: [{
+                    data: fabricData.map(f => f.value),
+                    backgroundColor: [
+                        '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', 
+                        '#9966FF', '#FF9F40', '#FF6384', '#C9CBCF'
+                    ],
+                    borderWidth: 2,
+                    borderColor: '#fff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            padding: 20,
+                            usePointStyle: true
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.label + ': ' + context.parsed.toLocaleString() + 'đ';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Monthly Trend Chart
+        const monthlyTrendCtx = document.getElementById('monthlyTrendChart').getContext('2d');
+        const monthlyData = ${JSON.stringify(Object.entries(monthlyStats))};
+        
+        new Chart(monthlyTrendCtx, {
+            type: 'line',
+            data: {
+                labels: monthlyData.map(([month]) => month),
+                datasets: [{
+                    label: 'Sản lượng (bộ)',
+                    data: monthlyData.map(([, stats]) => stats.totalProduction),
+                    borderColor: '#36A2EB',
+                    backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4
+                }, {
+                    label: 'Vải sử dụng (m)',
+                    data: monthlyData.map(([, stats]) => Math.round(stats.totalFabricUsed)),
+                    borderColor: '#FF6384',
+                    backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(0,0,0,0.1)'
+                        }
+                    },
+                    x: {
+                        grid: {
+                            color: 'rgba(0,0,0,0.1)'
+                        }
+                    }
+                }
+            }
+        });
+    </script>
 </body>
 </html>`;
 
@@ -1066,6 +1269,14 @@ const FabricApp = () => {
               >
                 <FileText className="w-4 h-4" />
                 Xuất báo cáo
+              </button>
+              <button
+                onClick={() => setShowHelpModal(true)}
+                className="bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-orange-700 text-sm"
+                title="Hướng dẫn sử dụng"
+              >
+                <HelpCircle className="w-4 h-4" />
+                Hướng dẫn
               </button>
             </div>
           </div>
@@ -1952,6 +2163,181 @@ const FabricApp = () => {
                   className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 text-sm font-medium"
                 >
                   Đã hiểu, bắt đầu sử dụng! 🚀
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Help Modal */}
+      {showHelpModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-2xl font-bold text-blue-600 flex items-center gap-2">
+                  📚 Hướng Dẫn Sử Dụng Hệ Thống Quản Lý Vải May
+                </h3>
+                <button
+                  onClick={() => setShowHelpModal(false)}
+                  className="text-gray-400 hover:text-gray-600 p-1"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              
+              <div className="space-y-6 text-gray-700">
+                {/* Overview Section */}
+                <div className="bg-blue-50 p-4 rounded-lg border-l-4 border-blue-500">
+                  <h4 className="text-lg font-semibold text-blue-800 mb-2 flex items-center gap-2">
+                    🎯 Tổng Quan Hệ Thống
+                  </h4>
+                  <p className="text-blue-700">
+                    Hệ thống giúp bạn quản lý kho vải, sản phẩm và theo dõi quá trình sản xuất một cách hiệu quả. 
+                    Tất cả dữ liệu được lưu trữ cục bộ trên trình duyệt của bạn.
+                  </p>
+                </div>
+
+                {/* Navigation Guide */}
+                <div>
+                  <h4 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                    🧭 Điều Hướng Hệ Thống
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <h5 className="font-medium text-blue-600 mb-2">📊 Tổng Quan</h5>
+                      <p className="text-sm">Xem thống kê tổng thể về kho vải, giá trị tồn kho và hoạt động sản xuất gần đây.</p>
+                    </div>
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <h5 className="font-medium text-green-600 mb-2">🧵 Danh Mục Vải</h5>
+                      <p className="text-sm">Quản lý thông tin các loại vải: thêm, sửa, xóa và theo dõi tồn kho.</p>
+                    </div>
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <h5 className="font-medium text-purple-600 mb-2">📦 Sản Phẩm</h5>
+                      <p className="text-sm">Định nghĩa các sản phẩm và lượng vải cần thiết cho từng sản phẩm.</p>
+                    </div>
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <h5 className="font-medium text-orange-600 mb-2">🏭 Sản Xuất</h5>
+                      <p className="text-sm">Ghi nhận lệnh sản xuất và tự động trừ vải khỏi kho.</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Step-by-step Guide */}
+                <div>
+                  <h4 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                    📋 Hướng Dẫn Chi Tiết
+                  </h4>
+                  
+                  <div className="space-y-4">
+                    <div className="border rounded-lg p-4">
+                      <h5 className="font-medium text-green-600 mb-2">Bước 1: Quản Lý Vải</h5>
+                      <ol className="list-decimal list-inside space-y-1 text-sm">
+                        <li>Vào tab "Danh mục vải"</li>
+                        <li>Click "Thêm vải mới" để nhập thông tin vải</li>
+                        <li>Điền đầy đủ: mã vải, chất liệu, màu sắc, chiều rộng, độ dài, giá</li>
+                        <li>Hệ thống sẽ cảnh báo khi vải dưới 150m</li>
+                      </ol>
+                    </div>
+
+                    <div className="border rounded-lg p-4">
+                      <h5 className="font-medium text-purple-600 mb-2">Bước 2: Định Nghĩa Sản Phẩm</h5>
+                      <ol className="list-decimal list-inside space-y-1 text-sm">
+                        <li>Vào tab "Sản phẩm"</li>
+                        <li>Click "Thêm sản phẩm" để tạo sản phẩm mới</li>
+                        <li>Chọn loại vải và nhập lượng vải cần dùng (m/bộ)</li>
+                        <li>Hệ thống sẽ tính toán tự động</li>
+                      </ol>
+                    </div>
+
+                    <div className="border rounded-lg p-4">
+                      <h5 className="font-medium text-orange-600 mb-2">Bước 3: Ghi Nhận Sản Xuất</h5>
+                      <ol className="list-decimal list-inside space-y-1 text-sm">
+                        <li>Vào tab "Sản xuất"</li>
+                        <li>Click "Thêm lệnh sản xuất"</li>
+                        <li>Chọn sản phẩm và nhập số lượng</li>
+                        <li>Hệ thống tự động trừ vải và cập nhật tồn kho</li>
+                      </ol>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Features Guide */}
+                <div>
+                  <h4 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                    ⚙️ Tính Năng Đặc Biệt
+                  </h4>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-green-50 p-4 rounded-lg border-l-4 border-green-500">
+                      <h5 className="font-medium text-green-800 mb-2">📊 Xuất Báo Cáo HTML</h5>
+                      <p className="text-sm text-green-700 mb-2">Tạo báo cáo đẹp mắt với biểu đồ và thống kê chi tiết.</p>
+                      <p className="text-xs text-green-600">🔸 Biểu đồ phân bố giá trị vải</p>
+                      <p className="text-xs text-green-600">🔸 Xu hướng sản xuất theo tháng</p>
+                      <p className="text-xs text-green-600">🔸 Thống kê sử dụng vải</p>
+                    </div>
+
+                    <div className="bg-purple-50 p-4 rounded-lg border-l-4 border-purple-500">
+                      <h5 className="font-medium text-purple-800 mb-2">💾 Backup & Khôi Phục</h5>
+                      <p className="text-sm text-purple-700 mb-2">Sao lưu và khôi phục toàn bộ dữ liệu.</p>
+                      <p className="text-xs text-purple-600">🔸 Tạo file backup định kỳ</p>
+                      <p className="text-xs text-purple-600">🔸 Khôi phục từ file JSON</p>
+                      <p className="text-xs text-purple-600">🔸 Bảo vệ dữ liệu khỏi mất mát</p>
+                    </div>
+
+                    <div className="bg-blue-50 p-4 rounded-lg border-l-4 border-blue-500">
+                      <h5 className="font-medium text-blue-800 mb-2">📁 Import/Export</h5>
+                      <p className="text-sm text-blue-700 mb-2">Nhập/xuất dữ liệu từ file CSV.</p>
+                      <p className="text-xs text-blue-600">🔸 Xuất từng danh mục riêng biệt</p>
+                      <p className="text-xs text-blue-600">🔸 Nhập dữ liệu từ Excel/CSV</p>
+                      <p className="text-xs text-blue-600">🔸 Template mẫu tự động</p>
+                    </div>
+
+                    <div className="bg-orange-50 p-4 rounded-lg border-l-4 border-orange-500">
+                      <h5 className="font-medium text-orange-800 mb-2">⚠️ Cảnh Báo Thông Minh</h5>
+                      <p className="text-sm text-orange-700 mb-2">Thông báo khi vải sắp hết hoặc có vấn đề.</p>
+                      <p className="text-xs text-orange-600">🔸 Cảnh báo vải dưới 150m</p>
+                      <p className="text-xs text-orange-600">🔸 Kiểm tra vải trước sản xuất</p>
+                      <p className="text-xs text-orange-600">🔸 Gợi ý nhập hàng</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tips & Tricks */}
+                <div className="bg-yellow-50 p-4 rounded-lg border-l-4 border-yellow-500">
+                  <h4 className="text-lg font-semibold text-yellow-800 mb-3 flex items-center gap-2">
+                    💡 Mẹo Sử Dụng
+                  </h4>
+                  <ul className="space-y-2 text-sm text-yellow-700">
+                    <li>🔸 <strong>Backup định kỳ:</strong> Sao lưu dữ liệu hàng tuần để tránh mất mát</li>
+                    <li>🔸 <strong>Mã vải:</strong> Sử dụng mã ngắn gọn, dễ nhớ (VD: VAI001, CTN01)</li>
+                    <li>🔸 <strong>Kiểm tra tồn kho:</strong> Theo dõi cảnh báo vải sắp hết</li>
+                    <li>🔸 <strong>Ghi chú sản xuất:</strong> Ghi rõ thông tin để dễ theo dõi</li>
+                    <li>🔸 <strong>Báo cáo định kỳ:</strong> Xuất báo cáo hàng tháng để phân tích</li>
+                  </ul>
+                </div>
+
+                {/* Data Safety Warning */}
+                <div className="bg-red-50 p-4 rounded-lg border-l-4 border-red-500">
+                  <h4 className="text-lg font-semibold text-red-800 mb-2 flex items-center gap-2">
+                    ⚠️ Lưu Ý Quan Trọng
+                  </h4>
+                  <div className="text-sm text-red-700 space-y-1">
+                    <p>• Dữ liệu được lưu trữ trên trình duyệt, sẽ mất khi xóa cache</p>
+                    <p>• Hãy sử dụng tính năng "Backup" thường xuyên</p>
+                    <p>• Không tắt tab/trình duyệt khi đang nhập liệu</p>
+                    <p>• Kiểm tra kỹ thông tin trước khi lưu</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="mt-8 flex justify-center">
+                <button
+                  onClick={() => setShowHelpModal(false)}
+                  className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-medium flex items-center gap-2"
+                >
+                  <span>✨ Đã hiểu, bắt đầu sử dụng!</span>
                 </button>
               </div>
             </div>
