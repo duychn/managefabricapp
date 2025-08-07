@@ -1,7 +1,8 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Package, TrendingUp, Warehouse, Download, Upload, FileText, Copy, Trash2, X } from 'lucide-react';
+import { Plus, Package, TrendingUp, Warehouse, Download, Upload, FileText, Copy, Trash2, X, FileSpreadsheet, HelpCircle } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 const FabricApp = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
